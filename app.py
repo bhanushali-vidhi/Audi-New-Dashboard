@@ -237,11 +237,17 @@ col3.metric(
     df["VIN"].nunique()
 )
 
-# Filter for 'yes' and then count unique VINs
-unique_eligible_count = df[df["Final_Eligibility"].astype(str).str.upper() == "YES"]["VIN"].nunique()
+# Filter for Payouts that are not 0, not "-", and not empty
+eligible_df = df[
+    (df["Final_Payout"] != 0) & 
+    (df["Final_Payout"].astype(str) != "-") & 
+    (df["Final_Payout"].notna())
+]
+
+unique_eligible_count = eligible_df["VIN"].nunique()
 
 col4.metric(
-    "Eligible VINs",
+    "Eligible VINs (Paid)",
     f"{unique_eligible_count:,}"
 )
 st.divider()
@@ -249,14 +255,13 @@ st.divider()
 # -----------------------------
 # AUDI DATA AUDIT (Add this here)
 # -----------------------------
+# Updated Audit Logic
 total_vins = df["VIN"].nunique()
-eligible_vins = df[df["Final_Eligibility"].astype(str).str.upper()=="YES"]["VIN"].nunique()
+# Logic: Paid VINs only
+eligible_vins = df[(df["Final_Payout"] != 0) & (df["Final_Payout"].astype(str) != "-")]["VIN"].nunique()
 
-# This displays it quietly in the sidebar for your reference
 st.sidebar.markdown("---")
-st.sidebar.markdown("### SYSTEM AUDIT")
-st.sidebar.write(f"Unique VINs: {total_vins}")
-st.sidebar.write(f"Unique Eligible: {eligible_vins}")
+st.sidebar.write(f"Audit: {total_vins} Total / {eligible_vins} Paid")
 
 
 # -----------------------------
@@ -265,23 +270,26 @@ st.sidebar.write(f"Unique Eligible: {eligible_vins}")
 
 st.subheader("Dealer Leaderboard")
 
+# 1. Base Aggregation
 dealer_leaderboard = df.groupby("Dealer_name").agg(
     Total_Payout=("Final_Payout", "sum"),
     Total_VIN=("VIN", "nunique")
 ).reset_index()
 
-# Calculate Unique Eligible VINs separately to ensure accuracy
-eligible_only = df[df["Final_Eligibility"].astype(str).str.upper() == "YES"]
-eligible_counts = eligible_only.groupby("Dealer_name")["VIN"].nunique().reset_index()
+# 2. Filter for valid payouts ONLY (Excluding 0 and "-")
+valid_payouts_only = df[
+    (df["Final_Payout"] != 0) & 
+    (df["Final_Payout"].astype(str) != "-") & 
+    (df["Final_Payout"].notna())
+]
+
+# 3. Count unique VINs from the filtered set
+eligible_counts = valid_payouts_only.groupby("Dealer_name")["VIN"].nunique().reset_index()
 eligible_counts.columns = ["Dealer_name", "Eligible_VIN"]
 
-# Merge back to leaderboard
+# 4. Merge and Calculate %
 dealer_leaderboard = dealer_leaderboard.merge(eligible_counts, on="Dealer_name", how="left").fillna(0)
-
-# Calculate % based on unique counts
-dealer_leaderboard["Eligibility %"] = (
-    dealer_leaderboard["Eligible_VIN"] / dealer_leaderboard["Total_VIN"]
-) * 100
+dealer_leaderboard["Eligibility %"] = (dealer_leaderboard["Eligible_VIN"] / dealer_leaderboard["Total_VIN"]) * 100
 
 dealer_leaderboard = dealer_leaderboard.sort_values(
     "Total_Payout",
@@ -440,6 +448,7 @@ if st.sidebar.button("⚠️ RESET DATABASE"):
         st.rerun() 
     except Exception as e:
         st.sidebar.error(f"Reset Failed: {e}")
+
 
 
 
