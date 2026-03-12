@@ -431,6 +431,16 @@ st.divider()
 #cursor.execute("DROP TABLE IF EXISTS segment3_data") 
 #conn.commit()
 
+if st.sidebar.button("⚠️ RESET DATABASE"):
+    try:
+        cursor.execute("DELETE FROM segment3_data")
+        conn.commit()
+        st.sidebar.success("Database Purged. System Restored.")
+        # Reruns the app to refresh the charts
+        st.rerun() 
+    except Exception as e:
+        st.sidebar.error(f"Reset Failed: {e}")
+
 
 
 
