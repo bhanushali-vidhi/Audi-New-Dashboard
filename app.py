@@ -178,6 +178,11 @@ if df.empty:
     st.warning("Upload a payout Excel to start analytics.")
     st.stop()
 
+month_order = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+]
+
 # -----------------------------
 # SIDEBAR FILTERS
 # -----------------------------
@@ -189,9 +194,15 @@ dealer_filter = st.sidebar.multiselect(
     sorted(df["Dealer_name"].dropna().unique())
 )
 
+# Create the list of months present in your data
+available_months = df["Month"].unique()
+
+# Sort available_months based on our defined month_order
+sorted_months = [m for m in month_order if m in available_months]
+
 month_filter = st.sidebar.multiselect(
     "Month",
-    sorted(df["Month"].dropna().unique())
+    sorted_months  # This now follows the calendar, not the alphabet
 )
 
 if dealer_filter:
@@ -414,3 +425,4 @@ st.divider()
 
 #with st.expander("View Full Data Table"):
 #    st.dataframe(df)
+
