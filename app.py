@@ -124,11 +124,19 @@ if uploaded_file:
         df_upload = df_upload.dropna(subset=["VIN"])
 
     # PREVENT DUPLICATE VIN INSERT
-    existing_vins = pd.read_sql("SELECT VIN FROM segment3_data", conn)
+    #existing_vins = pd.read_sql("SELECT VIN FROM segment3_data", conn)
+
+    #if "VIN" in df_upload.columns:
+    #    df_upload = df_upload[~df_upload["VIN"].isin(existing_vins["VIN"])]
+
+    # 1. Get existing VINs only for the SELECTED Month and Year
+    query = f"SELECT VIN FROM segment3_data WHERE Month = '{month}' AND Year = {year}"
+    existing_vins_this_period = pd.read_sql(query, conn)
 
     if "VIN" in df_upload.columns:
-        df_upload = df_upload[~df_upload["VIN"].isin(existing_vins["VIN"])]
-
+        # 2. Only filter out if the VIN is already in the DB for THIS specific month
+        df_upload = df_upload[~df_upload["VIN"].isin(existing_vins_this_period["VIN"])]
+    
     # SELECT REQUIRED COLUMNS
     db_df = df_upload[[
         "Dealer No_",
@@ -218,12 +226,27 @@ col3.metric(
     df["VIN"].nunique()
 )
 
+# Filter for 'yes' and then count unique VINs
+unique_eligible_count = df[df["Final_Eligibility"].astype(str).str.upper() == "YES"]["VIN"].nunique()
+
 col4.metric(
     "Eligible VINs",
-    df[df["Final_Eligibility"].astype(str).str.lower()=="yes"].shape[0]
+    f"{unique_eligible_count:,}"
 )
-
 st.divider()
+
+# -----------------------------
+# AUDI DATA AUDIT (Add this here)
+# -----------------------------
+total_vins = df["VIN"].nunique()
+eligible_vins = df[df["Final_Eligibility"].astype(str).str.upper()=="YES"]["VIN"].nunique()
+
+# This displays it quietly in the sidebar for your reference
+st.sidebar.markdown("---")
+st.sidebar.markdown("### SYSTEM AUDIT")
+st.sidebar.write(f"Unique VINs: {total_vins}")
+st.sidebar.write(f"Unique Eligible: {eligible_vins}")
+
 
 # -----------------------------
 # DEALER LEADERBOARD
@@ -232,15 +255,22 @@ st.divider()
 st.subheader("Dealer Leaderboard")
 
 dealer_leaderboard = df.groupby("Dealer_name").agg(
-    Total_Payout=("Final_Payout","sum"),
-    Total_VIN=("VIN","nunique"),
-    Eligible_VIN=("Final_Eligibility",lambda x: (x.astype(str).str.lower()=="yes").sum())
+    Total_Payout=("Final_Payout", "sum"),
+    Total_VIN=("VIN", "nunique")
 ).reset_index()
 
+# Calculate Unique Eligible VINs separately to ensure accuracy
+eligible_only = df[df["Final_Eligibility"].astype(str).str.upper() == "YES"]
+eligible_counts = eligible_only.groupby("Dealer_name")["VIN"].nunique().reset_index()
+eligible_counts.columns = ["Dealer_name", "Eligible_VIN"]
+
+# Merge back to leaderboard
+dealer_leaderboard = dealer_leaderboard.merge(eligible_counts, on="Dealer_name", how="left").fillna(0)
+
+# Calculate % based on unique counts
 dealer_leaderboard["Eligibility %"] = (
-    dealer_leaderboard["Eligible_VIN"] /
-    dealer_leaderboard["Total_VIN"]
-)*100
+    dealer_leaderboard["Eligible_VIN"] / dealer_leaderboard["Total_VIN"]
+) * 100
 
 dealer_leaderboard = dealer_leaderboard.sort_values(
     "Total_Payout",
@@ -334,39 +364,45 @@ st.divider()
 
 st.subheader("Dealer Comparison: Parts RRP vs Eligible Payout")
 
-eligible_df = df[df["Final_Eligibility"].astype(str).str.lower()=="yes"]
-
+# Grouping by unique VIN counts instead of just row counts
 dealer_compare = df.groupby("Dealer_name").agg(
-    Parts_RRP=("Parts_RRP","sum")
+    Total_Unique_VINs=("VIN", "nunique")
 ).reset_index()
 
-eligible_payout = eligible_df.groupby("Dealer_name")["Final_Payout"].sum().reset_index()
-eligible_payout.columns = ["Dealer_name","Eligible_Payout"]
+eligible_unique = df[df["Final_Eligibility"].astype(str).str.upper() == "YES"].groupby("Dealer_name")["VIN"].nunique().reset_index()
+eligible_unique.columns = ["Dealer_name", "Unique_Eligible"]
 
-dealer_compare = dealer_compare.merge(
-    eligible_payout,
-    on="Dealer_name",
-    how="left"
-).fillna(0)
+dealer_compare = dealer_compare.merge(eligible_unique, on="Dealer_name", how="left").fillna(0)
 
+fig_compare = px.bar(
+    dealer_compare,
+    x="Dealer_name",
+    y=["Total_Unique_VINs", "Unique_Eligible"],
+    barmode="group",
+    template="plotly_dark",
+    color_discrete_map={
+        "Total_Unique_VINs": "#BB0A30",   # Audi Red
+        "Unique_Eligible": "#ffffff"# Alluminium/ White
+    }
+)
 #fig_compare = px.bar(
 #    dealer_compare,
 #    x="Dealer_name",
 #    y=["Parts_RRP","Eligible_Payout"],
 #    barmode="group",
 #)
-fig_compare = px.bar(
-    dealer_compare,
-    x="Dealer_name",
-    y=["Parts_RRP", "Eligible_Payout"],
-    barmode="group",
-    template="plotly_dark",
-    # White for RRP, Audi Red for Payout
-    color_discrete_map={
-        "Parts_RRP": "#BB0A30", 
-        "Eligible_Payout":  "#FFFFFF"
-    }
-)
+#fig_compare = px.bar(
+#    dealer_compare,
+#    x="Dealer_name",
+#    y=["Parts_RRP", "Eligible_Payout"],
+#    barmode="group",
+#    template="plotly_dark",
+#   # White for RRP, Audi Red for Payout
+#    color_discrete_map={
+#        "Parts_RRP": "#BB0A30", 
+#        "Eligible_Payout":  "#FFFFFF"
+#    }
+#)
 
 st.plotly_chart(fig_compare, use_container_width=True)
 
@@ -376,5 +412,5 @@ st.divider()
 # RAW DATA
 # -----------------------------
 
-with st.expander("View Full Data Table"):
-    st.dataframe(df)
+#with st.expander("View Full Data Table"):
+#    st.dataframe(df)
