@@ -428,8 +428,9 @@ st.divider()
 
 
 # Add this, run the app once, then DELETE THIS LINE
-#cursor.execute("DROP TABLE IF EXISTS segment3_data") 
-#conn.commit()
+cursor.execute("DROP TABLE IF EXISTS segment3_data") 
+conn.commit()
+
 
 
 
