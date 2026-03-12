@@ -42,9 +42,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="Segment III Payout Dashboard", layout="wide")
+st.set_page_config(page_title="Audi Analytics Dashboard", layout="wide")
 
-st.title("Segment III Payout Analytics Dashboard")
+st.title("Audi Analytics Dashboard")
 
 # -----------------------------
 # DATABASE CONNECTION
@@ -425,4 +425,5 @@ st.divider()
 
 #with st.expander("View Full Data Table"):
 #    st.dataframe(df)
+
 
